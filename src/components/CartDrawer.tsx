@@ -42,15 +42,83 @@ export const CartDrawer: React.FC = () => {
 
     const fetchRecipes = async () => {
         try {
-            // Get top 3 ingredients from cart
-            const ingredients = cart.slice(0, 3).map(i => i.name).join(' ');
-            const res: any = await client.search({
-                requests: [{ indexName: 'food', query: ingredients, hitsPerPage: 20 }]
-            });
-            setSuggestedRecipes(res.results[0].hits);
+            if (cart.length === 0) {
+                setSuggestedRecipes([]);
+                return;
+            }
+
+            // Get cart item names (these are the ingredients we have)
+            const cartIngredients = cart.map(i => i.name.toLowerCase());
+
+            // Perform parallel searches for the top 3 items to get a diverse set of recipes
+            const searchItems = cart.slice(0, 3).map(i => i.name);
+            const searchRequests = searchItems.map(item => ({
+                indexName: 'food',
+                query: item,
+                hitsPerPage: 15
+            }));
+
+            const res: any = await client.search({ requests: searchRequests });
+
+            // Flatten all hits from individual queries and deduplicate by objectID
+            const allHits = res.results.flatMap((result: any) => result.hits || []);
+            const uniqueHits = Array.from(new Map(allHits.map((hit: any) => [hit.objectID, hit])).values());
+
+            if (uniqueHits.length > 0) {
+                // Score each recipe by how many of its ingredients match cart items
+                const scoredRecipes = uniqueHits.map((recipe: any) => {
+                    const recipeIngredients = recipe.ingredients || [];
+                    let matchCount = 0;
+
+                    recipeIngredients.forEach((ing: string) => {
+                        const ingLower = ing.toLowerCase();
+                        if (cartIngredients.some(cartIng =>
+                            ingLower.includes(cartIng) || cartIng.includes(ingLower)
+                        )) {
+                            matchCount++;
+                        }
+                    });
+
+                    return { ...recipe, matchCount };
+                });
+
+                // Sort by match count (highest first)
+                const sortedRecipes = scoredRecipes
+                    .filter((r: any) => r.matchCount > 0)
+                    .sort((a: any, b: any) => b.matchCount - a.matchCount)
+                    .slice(0, 10);
+
+                if (sortedRecipes.length > 0) {
+                    setSuggestedRecipes(sortedRecipes);
+                    return;
+                }
+            }
         } catch (error) {
-            console.error('Error fetching recipes:', error);
+            console.error('Error fetching recipes from Algolia:', error);
         }
+
+        // Fallback: Use local mock recipes and score by ingredient match
+        const { mockRecipes } = await import('@/lib/data');
+        const cartIngredients = cart.map(i => i.name.toLowerCase());
+
+        const scoredMock = mockRecipes.map(recipe => {
+            let matchCount = 0;
+            recipe.ingredients.forEach(ing => {
+                const ingLower = ing.toLowerCase();
+                if (cartIngredients.some(cartIng =>
+                    ingLower.includes(cartIng) || cartIng.includes(ingLower)
+                )) {
+                    matchCount++;
+                }
+            });
+            return { ...recipe, matchCount };
+        });
+
+        const sorted = scoredMock
+            .filter(r => r.matchCount > 0)
+            .sort((a, b) => b.matchCount - a.matchCount);
+
+        setSuggestedRecipes(sorted);
     };
 
     if (!isCartOpen) return null;
