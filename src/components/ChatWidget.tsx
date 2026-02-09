@@ -184,37 +184,36 @@ const findProductsForIngredients = (ingredients: string[]): Product[] => {
 // Enhanced system prompt with cart capabilities
 const SYSTEM_PROMPT = `You are Nani Assist, a highly advanced agentic culinary AI for Nani, a premium grocery platform. You are not just a chatbot; you are an intelligent culinary concierge with direct access to the store's infrastructure.
 
-YOUR IDENTITY & POWERS:
-1.  **Inventory Omniscience**: You do not just "guess"; you have real-time access to DOKO's massive inventory of 23,000+ items (ingredients_final.json). You know prices, categories, and availability.
+**YOUR IDENTITY & POWERS:**
+1.  **Inventory Omniscience**: You have real-time access to DOKO's massive inventory of 23,000+ items. You know prices, categories, and availability.
 2.  **Recipe Intelligence**: You are integrated with a professional Algolia-powered recipe database. You can instantly retrieve detailed instructions, cooking times, and ingredient lists.
-3.  **Active Cart Management**: You possess the "Agency" to modify the user's shopping cart. When a user says "buy this" or "add ingredients," you process this action instantly.
-4.  **Cuisine Awareness**: You understand culinary taxonomy. If a user asks for "Japanese," you know to look for Sushi, Ramen, or Teriyaki, even if they don't specify the dish.
+3.  **Active Cart Management**: You possess the "Agency" to directly modify the user's shopping cart. When a user says "add this" or "buy some milk," you execute this action instantly.
+4.  **Cart-Based Recipe Suggestions**: When the user asks "what can I cook?" or "suggest a recipe," you MUST look at their current cart items and suggest recipes that use those ingredients.
+5.  **Cuisine Awareness**: You understand culinary taxonomy. If a user asks for "Japanese," you know to look for Sushi, Ramen, or Teriyaki.
 
-HOW TO USE YOUR INTELLIGENT DATA RETRIEVAL:
+**HOW TO USE YOUR DATA RETRIEVAL:**
 You will receive context in specific formats. You MUST interpret this data intelligently:
 
+- **[CURRENT USER CART STATUS]**: This shows what the user ALREADY has in their shopping bag.
+    *   *Action*: Use this to suggest what recipes they can cook with these items.
+    *   *Example*: If they have Chicken, Onion, and Tomato, suggest Chicken Tikka or Chicken Salad.
+
 - **[RECIPES FOUND]**: These are real records from the database.
-    *   *Action*: Analyze them. Recommend the best one based on the user's query. Mention the title, cook time, and key ingredients.
-    *   *Example*: "I found a fantastic 'Spaghetti Carbonara' recipe that takes only 20 minutes."
+    *   *Action*: Recommend the BEST one based on the user's query AND their cart contents. Mention the title, cook time, and key ingredients.
 
-- **[PRODUCTS FOUND]**: These are items available in the store right now.
-    *   *Action*: Suggest them as specific purchases. Mention their *exact* names and prices if available.
-    *   *Example*: "For that, I recommend the 'Organic Basil' ($3.99) and 'Roma Tomatoes'."
+- **[PRODUCTS FOUND]**: These are items available in the store.
+    *   *Action*: Suggest them as specific purchases. Mention their *exact* names and prices.
 
-- **[ITEMS ADDED TO CART]**: You have successfully executed a cart transaction.
-    *   *Action*: Confirm the action with authority and list the items.
-    *   *IMPORTANT*: To actually add items to the user's cart that you found in the product list, you MUST output this tag followed by the list of items. The system will detect this and execute the add operation.
-    *   *Example*: "[ITEMS ADDED TO CART]: - Organic Basil - Roma Tomatoes"
+- **[ITEMS ADDED TO CART]**: To ADD items to the user's cart, you MUST output this tag followed by the list of product names.
+    *   *CRITICAL*: This is how you execute cart additions. The system scans your response for this tag.
+    *   *Correct Format*: "[ITEMS ADDED TO CART]:\n- Milk\n- Eggs\n- Salt"
+    *   If the user says "add milk and eggs", you MUST respond with: "[ITEMS ADDED TO CART]:\n- Milk\n- Eggs\n\nDone! I've added Milk and Eggs to your cart."
 
-- **[NO RESULTS]**:
-    *   *Action*: Use your general culinary knowledge to guide the user back to valid paths.
-    *   *Example*: "I couldn't find a specific recipe for 'Moon Rock Soup', but our inventory has excellent ingredients for traditional stone soups or root vegetable stews. Should we explore those?"
-
-OPERATIONAL RULES:
-- **Be Agentic**: Don't just answer; propose the next step. "Shall I add these ingredients to your cart?"
-- **Be Concise but Expert**: Speak with the confidence of a Michelin-star chef who is also a data scientist.
-- **Never Hallucinate Inventory**: If it's not in [PRODUCTS FOUND], don't say we sell it. Instead, say "I can look for a substitute."
-- **Formatting**: Use bolding for **Product Names** and *Recipe Titles* to make them stand out.`;
+**OPERATIONAL RULES:**
+- **Be Agentic**: Don't just answer; propose the next step. "Shall I add these to your cart?"
+- **Be Concise but Expert**: Speak with confidence.
+- **Never Hallucinate Inventory**: Only suggest items that appeared in [PRODUCTS FOUND].
+- **Formatting**: Use bolding for **Product Names** and *Recipe Titles*.`;
 
 // Create initial messages as a function to avoid SSR/client timestamp mismatch
 const createInitialMessages = (): Message[] => [
@@ -233,9 +232,9 @@ const AGENT: Agent = {
 };
 
 // Keywords that trigger search
-const INGREDIENT_KEYWORDS = ['ingredient', 'have', 'stock', 'find', 'looking for', 'need', 'buy', 'purchase', 'get', 'available', 'search', 'add'];
-const RECIPE_KEYWORDS = ['recipe', 'cook', 'make', 'prepare', 'dish', 'meal', 'dinner', 'lunch', 'breakfast', 'pasta', 'chicken', 'beef', 'salad', 'japanese', 'chinese', 'italian', 'mexican', 'indian'];
-const ADD_TO_CART_KEYWORDS = ['add to cart', 'add all', 'add ingredients', 'buy ingredients', 'get ingredients', 'add items', 'add everything', 'buy', 'purchase'];
+const INGREDIENT_KEYWORDS = ['ingredient', 'have', 'stock', 'find', 'looking for', 'need', 'buy', 'purchase', 'get', 'available', 'search', 'add', 'want'];
+const RECIPE_KEYWORDS = ['recipe', 'cook', 'make', 'prepare', 'dish', 'meal', 'dinner', 'lunch', 'breakfast', 'pasta', 'chicken', 'beef', 'salad', 'japanese', 'chinese', 'italian', 'mexican', 'indian', 'what can i cook', 'suggest', 'suggestion'];
+const ADD_TO_CART_KEYWORDS = ['add to cart', 'add all', 'add ingredients', 'buy ingredients', 'get ingredients', 'add items', 'add everything', 'buy', 'purchase', 'add some', 'add a', 'add the'];
 
 // Cuisine to Popular Dishes Map for Smart Search Expansion
 const CUISINE_MAP: Record<string, string> = {
@@ -423,27 +422,37 @@ const ChatWidget: React.FC = () => {
             let addedProducts: Product[] = [];
             let foundIngredients: Product[] = []; // Store ingredients found during search
 
-            // INJECT CURRENT CART STATUS if user mentions "cart"
-            if (lowerText.includes('cart') || lowerText.includes('bag')) {
-                const cartSummary = cart.length > 0
-                    ? `[CURRENT USER CART STATUS]: The user currently has ${cart.length} items in their cart: ${cart.map(i => `${i.name} (Qty: ${i.quantity || 1})`).join(', ')}.`
-                    : `[CURRENT USER CART STATUS]: The user's cart is currently EMPTY.`;
-
-                contextualPrompt = cartSummary + "\n\n" + contextualPrompt;
-            }
+            // ALWAYS inject cart status so the AI knows what the user has
+            const cartSummary = cart.length > 0
+                ? `[CURRENT USER CART STATUS]: The user currently has ${cart.length} items in their shopping bag: ${cart.map(i => `${i.name} (Qty: ${i.quantity || 1})`).join(', ')}. You can suggest recipes using these.`
+                : `[CURRENT USER CART STATUS]: The user's shopping bag is currently EMPTY.`;
+            contextualPrompt = cartSummary + "\n\n" + contextualPrompt;
 
             // Perform Algolia retrieval if needed
             if (needsIngredientSearch || needsRecipeSearch || wantsToAddToCart) {
                 setIsSearching(true);
                 let searchContext = '\n\n[SEARCH RESULTS FROM ALGOLIA]:\n';
 
-                if (needsIngredientSearch) {
+                // For direct "add X" requests, search specifically for that item
+                if (wantsToAddToCart && !needsRecipeSearch) {
+                    // User wants to add a specific product, not a recipe
+                    const { text: ingredientResults, products: p } = await searchIngredients(searchTerms || userText);
+                    foundIngredients = p;
+                    searchContext += `\n[PRODUCTS FOUND]:\n${ingredientResults}\n`;
+
+                    // If we found matching products, mention them
+                    if (p.length > 0) {
+                        searchContext += `\n[SYSTEM NOTE]: The user wants to add items. Output "[ITEMS ADDED TO CART]:\n- ${p[0].name}" to add the first match, or list all relevant items.\n`;
+                    }
+                }
+
+                if (needsIngredientSearch && foundIngredients.length === 0) {
                     const { text: ingredientResults, products: p } = await searchIngredients(searchTerms || userText);
                     foundIngredients = p;
                     searchContext += `\n[PRODUCTS FOUND]:\n${ingredientResults}\n`;
                 }
 
-                if (needsRecipeSearch || wantsToAddToCart) {
+                if (needsRecipeSearch || (wantsToAddToCart && needsRecipeSearch)) {
                     const { text: recipeResults, recipes } = await searchRecipes(searchTerms || userText);
                     searchContext += `\n[RECIPES FOUND]:\n${recipeResults}\n`;
 
@@ -471,8 +480,8 @@ const ChatWidget: React.FC = () => {
                     }
                 }
 
-                searchContext += '\n[END SEARCH RESULTS]\n\n[SYSTEM NOTE]: Explicitly mention to the user that you retrieved these items from the Doko Catalog via Algolia Search to demonstrate intelligent retrieval. E.g., "I searched our catalog and found..."\n\nPlease use the above real data to answer the user\'s question:';
-                contextualPrompt = searchContext + '\n\nUser Question: ' + userText;
+                searchContext += '\n[END SEARCH RESULTS]\n\n[SYSTEM NOTE]: Use the above real data from Algolia. If the user asked to add something, output the [ITEMS ADDED TO CART] tag with the product names.\n';
+                contextualPrompt = searchContext + '\nUser Question: ' + userText;
                 setIsSearching(false);
             }
 
@@ -558,40 +567,47 @@ const ChatWidget: React.FC = () => {
                         // 1. Remove bullet point (* or -)
                         let cleanLine = line.replace(/^[\-\*]\s+/, '');
                         // 2. Remove price info or extra details
-                        // Remove any content in parentheses at the end of the string (e.g., "($1.99)", "(approx $5)", "($1.99/lb)")
                         cleanLine = cleanLine.replace(/\s*\(.*?\)\s*$/, '');
-                        // Remove potential dash separators for price (e.g. " - $1.99")
                         cleanLine = cleanLine.split(' - $')[0];
-
                         // 3. Remove bold markers (**name**)
                         cleanLine = cleanLine.replace(/\*\*/g, '');
 
                         const productName = cleanLine.trim();
 
                         if (productName) {
-                            // Find product in local database with fuzzy matching for plurals
-                            const product = foundIngredients.find(p => {
-                                const pName = p.name.toLowerCase();
-                                const targetName = productName.toLowerCase();
-                                // Exact match
-                                if (pName === targetName) return true;
-                                // Singular/Plural match
-                                if (targetName.endsWith('s') && pName === targetName.slice(0, -1)) return true;
-                                if (pName.endsWith('s') && targetName === pName.slice(0, -1)) return true;
-                                return false;
-                            }) || products.find(p => {
-                                const pName = p.name.toLowerCase();
-                                const targetName = productName.toLowerCase();
+                            const targetName = productName.toLowerCase();
 
-                                // Exact match
-                                if (pName === targetName) return true;
+                            // Try to find in foundIngredients first, then all products
+                            const allCandidates = [...foundIngredients, ...products];
 
-                                // Singular/Plural match (simple 's' check)
-                                if (targetName.endsWith('s') && pName === targetName.slice(0, -1)) return true;
-                                if (pName.endsWith('s') && targetName === pName.slice(0, -1)) return true;
+                            // 1. Exact match
+                            let product = allCandidates.find(p => p.name.toLowerCase() === targetName);
 
-                                return false;
-                            });
+                            // 2. Singular/Plural match
+                            if (!product) {
+                                product = allCandidates.find(p => {
+                                    const pName = p.name.toLowerCase();
+                                    if (targetName.endsWith('s') && pName === targetName.slice(0, -1)) return true;
+                                    if (pName.endsWith('s') && targetName === pName.slice(0, -1)) return true;
+                                    return false;
+                                });
+                            }
+
+                            // 3. Partial includes (e.g., "Milk" matches "Whole Milk")
+                            if (!product) {
+                                product = allCandidates.find(p =>
+                                    p.name.toLowerCase().includes(targetName) ||
+                                    targetName.includes(p.name.toLowerCase())
+                                );
+                            }
+
+                            // 4. Fuzzy match using Levenshtein distance
+                            if (!product && targetName.length > 3) {
+                                const tolerance = Math.floor(targetName.length / 4) + 1;
+                                product = allCandidates.find(p =>
+                                    getLevenshteinDistance(targetName, p.name.toLowerCase()) <= tolerance
+                                );
+                            }
 
                             if (product) {
                                 addToCart(product, 1);
