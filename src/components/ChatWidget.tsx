@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, ArrowUp, Trash2, Copy, Check, Search, ShoppingBag } from 'lucide-react';
 import { algoliasearch } from 'algoliasearch';
 import { Message, Agent, Product } from '@/lib/types';
-import { products } from '@/lib/data';
+import { products, mockRecipes } from '@/lib/data';
 import { useStore } from '@/context/StoreContext';
 
 // Initialize Algolia client
@@ -12,6 +12,43 @@ const algoliaClient = algoliasearch(
     process.env.NEXT_PUBLIC_ALGOLIA_APP_ID!,
     process.env.NEXT_PUBLIC_ALGOLIA_SEARCH_KEY!
 );
+
+// Helper for Fuzzy Search (Levenshtein Distance)
+const getLevenshteinDistance = (a: string, b: string): number => {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+
+    const matrix = [];
+
+    // increment along the first column of each row
+    for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+    }
+
+    // increment each column in the first row
+    for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+    }
+
+    // Fill in the rest of the matrix
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1, // substitution
+                    Math.min(
+                        matrix[i][j - 1] + 1, // insertion
+                        matrix[i - 1][j] + 1  // deletion
+                    )
+                );
+            }
+        }
+    }
+
+    return matrix[b.length][a.length];
+};
 
 // Enhanced search function for ingredients - searches REAL Algolia index
 const searchIngredients = async (query: string): Promise<{ text: string; products: Product[] }> => {
@@ -50,10 +87,28 @@ const searchIngredients = async (query: string): Promise<{ text: string; product
 
     // 2. Fallback to local filtering if Algolia fails or returns nothing
     const queryLower = query.toLowerCase();
-    const localResults = products.filter(p =>
+
+    // First pass: Exact includes match
+    let localResults = products.filter(p =>
         p.name.toLowerCase().includes(queryLower) ||
         p.category.toLowerCase().includes(queryLower)
     ).slice(0, 10);
+
+    // Second pass: Fuzzy match if no exact results
+    if (localResults.length === 0 && query.length > 3) {
+        localResults = products.filter(p => {
+            const nameLower = p.name.toLowerCase();
+            // Check if distance is small enough (allow 1 error per 4 chars approx)
+            const tolerance = Math.floor(query.length / 4) + 1;
+
+            // Check full name or individual words
+            if (getLevenshteinDistance(queryLower, nameLower) <= tolerance) return true;
+
+            // Check individual words in product name
+            const words = nameLower.split(' ');
+            return words.some(w => getLevenshteinDistance(queryLower, w) <= tolerance);
+        }).slice(0, 5);
+    }
 
     if (localResults.length > 0) {
         const text = localResults.map(p =>
@@ -78,11 +133,25 @@ const searchRecipes = async (query: string): Promise<{ text: string; recipes: an
             ).join('\n');
             return { text, recipes: hits };
         }
-        return { text: 'No recipes found matching your query.', recipes: [] };
     } catch (error) {
-        console.error('Recipe search error:', error);
-        return { text: 'Unable to search recipes at the moment.', recipes: [] };
+        console.error('Recipe search error, using fallback:', error);
     }
+
+    // Fallback to local mock recipes if Algolia fails or returns nothing
+    const queryLower = query.toLowerCase();
+    const localRecipes = mockRecipes.filter(r =>
+        r.title.toLowerCase().includes(queryLower) ||
+        r.ingredients.some(i => i.toLowerCase().includes(queryLower))
+    ).slice(0, 3);
+
+    if (localRecipes.length > 0) {
+        const text = localRecipes.map((r: any) =>
+            `- "${r.title}" - Ingredients: ${r.ingredients?.slice(0, 5).join(', ')}${r.ingredients?.length > 5 ? '...' : ''}`
+        ).join('\n');
+        return { text, recipes: localRecipes };
+    }
+
+    return { text: 'No recipes found matching your query.', recipes: [] };
 };
 
 // Find matching products for recipe ingredients

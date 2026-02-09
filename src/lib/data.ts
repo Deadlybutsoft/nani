@@ -24,6 +24,50 @@ const mapCategory = (name: string, cat: string): Category => {
 
 };
 
+// Mock Recipes for Fallback
+export const mockRecipes = [
+    {
+        objectID: 'fallback-1',
+        title: 'Spaghetti Carbonara',
+        ingredients: ['Spaghetti', 'Eggs', 'Pecorino Romano', 'Guanciale', 'Black Pepper'],
+        instructions: 'Cook pasta. Mix eggs and cheese. Fry guanciale. Combine.',
+        cookTime: '20 mins',
+        image: 'https://images.unsplash.com/photo-1612874742237-6526221588e3?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+        objectID: 'fallback-2',
+        title: 'Simple Chicken Salad',
+        ingredients: ['Chicken Breast', 'Lettuce', 'Tomato', 'Cucumber', 'Olive Oil', 'Lemon'],
+        instructions: 'Grill chicken. Chop vegetables. Toss with dressing.',
+        cookTime: '15 mins',
+        image: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+        objectID: 'fallback-3',
+        title: 'Classic Pancakes',
+        ingredients: ['Flour', 'Milk', 'Egg', 'Sugar', 'Butter', 'Baking Powder'],
+        instructions: 'Mix dry ingredients. Add wet ingredients. Cook on griddle.',
+        cookTime: '20 mins',
+        image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+        objectID: 'fallback-4',
+        title: 'Vegetable Stir Fry',
+        ingredients: ['Broccoli', 'Carrot', 'Bell Pepper', 'Soy Sauce', 'Ginger', 'Garlic'],
+        instructions: 'Stir fry vegetables in hot wok with sauce.',
+        cookTime: '15 mins',
+        image: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&q=80&w=800',
+    },
+    {
+        objectID: 'fallback-5',
+        title: 'Beef Tacos',
+        ingredients: ['Ground Beef', 'Taco Shells', 'Lettuce', 'Cheese', 'Salsa', 'Onion'],
+        instructions: 'Cook beef with spices. Fill tacos.',
+        cookTime: '25 mins',
+        image: 'https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&q=80&w=800',
+    }
+];
+
 // Priority list for "Better" options
 const POPULAR_ITEMS = [
     'Tomato', 'Potato', 'Onion', 'Garlic', 'Carrot', 'Spinach', 'Broccoli', 'Cucumber', 'Pumpkin', 'Cabbage', // Veg
